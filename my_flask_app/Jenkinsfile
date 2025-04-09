@@ -1,0 +1,39 @@
+pipeline {
+  agent any
+  environment {
+    PROJECT_ID = 'your-gcp-project-id'
+  }
+  stages {
+    stage('Build Docker Image') {
+      steps {
+	sh 'gcloud auth configure-docker'
+        sh 'docker build -t flask-app .'
+      }
+    }
+    stage('Push to GCR') {
+      steps {
+        sh 'docker tag flask-app gcr.io/<PROJECT_ID>/flask-app:v1'
+        sh 'docker push gcr.io/$PROJECT_ID/flask-app:v1'
+      }
+    }
+    stage('Create Kubernetes Cluster') {
+	steps {
+	  sh 'gcloud config set compute/zone europe-west1-c'
+	  sh 'gcloud container clusters create flask-cluster --num-nodes=4'
+	  sh 'gcloud container clusters get-credentials flask-cluster'
+	}
+    }
+    stage('Deploy to GKE') {
+      steps {
+        sh 'kubectl apply -f deployment.yaml'
+      }
+    }
+    stage('Expose App') {
+      steps {
+	sh 'kubectl expose deployment flask-deployment --type=LoadBalancer --name=flask-service --port=80 --target-port=8080'
+	sh 'kubectl get service flask-service'
+      }
+    }
+  }
+}
+
